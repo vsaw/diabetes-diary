@@ -104,7 +104,7 @@ const calendarDays = computed(() => {
         return bloodSugarLevels[data.bloodSugar]
       }
     }
-    return 50
+    return null
   }
 
   // Pre-calculate segments
@@ -133,15 +133,16 @@ const calendarDays = computed(() => {
     const entryData = monthlyEntries.value[dateStr]
     const isCurrentMonth = date.getMonth() === month
     
-    const startLevel = findLastKnownLevel(date)
+    let startLevel = findLastKnownLevel(date)
     if (entryData && entryData.bloodSugar) {
       lastKnownLevel = bloodSugarLevels[entryData.bloodSugar]
     }
     const endLevel = lastKnownLevel
+    if(startLevel === null) {
+      startLevel = endLevel
+    }
     
-    console.log(entryData)
     const color = bloodSugarOptions.find(option => option.value === entryData?.bloodSugar)?.color
-    console.log(color)
     return {
       date,
       isCurrentMonth,
