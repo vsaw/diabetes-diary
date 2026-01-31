@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { getEntriesByMonth } from '../utils/db'
+import { getAllEntries } from '../utils/db'
+import { bloodSugarOptions } from '../utils/consts'
 
 // Blood Sugar Icons
 import TooLowIcon from '../assets/icons/blood-sugar/too-low.svg'
@@ -42,6 +43,14 @@ const ovulationIconMap = {
   'Menstrual': MenstrualIcon
 }
 
+const bloodSugarLevels = {
+  'too-high': 10,
+  'high': 30,
+  'on-target': 50,
+  'low': 70,
+  'too-low': 90
+}
+
 const currentMonthName = computed(() => {
   return currentDate.value.toLocaleString('default', { month: 'long', year: 'numeric' })
 })
@@ -49,11 +58,11 @@ const currentMonthName = computed(() => {
 const fetchMonthlyData = async () => {
   const year = currentDate.value.getFullYear()
   const month = currentDate.value.getMonth()
-  const entries = await getEntriesByMonth(year, month)
   
-  // Create a map for quick lookup
+  // Fetch all entries to ensure continuity across months
+  const allEntries = await getAllEntries()
   const map = {}
-  entries.forEach(entry => {
+  allEntries.forEach(entry => {
     map[entry.date] = entry.data
   })
   monthlyEntries.value = map
@@ -73,44 +82,78 @@ const calendarDays = computed(() => {
   let startDay = firstDayOfMonth.getDay()
   const firstDayIndex = (startDay === 0) ? 6 : startDay - 1
   
+  const today = new Date()
+  let lastKnownLevel = 50 // Default to on-target if no data exists
+
+  // Calculate start and end levels for all days in the current view
   const days = []
   
+  // Function to find the last known level before a specific date
+  const findLastKnownLevel = (date) => {
+    // We sort the keys to find the one just before the current date
+    const sortedDates = Object.keys(monthlyEntries.value).map(d => new Date(d)).sort((a, b) => a - b)
+    const prevEntryDates = sortedDates.filter(d => d < date)
+    if (prevEntryDates.length > 0) {
+      const lastDate = prevEntryDates[prevEntryDates.length - 1]
+      
+      const msPerDay = 24 * 60 * 60 * 1000;
+      const diffDays = Math.round((date.getTime() - lastDate.getTime()) / msPerDay);
+      
+      const data = monthlyEntries.value[lastDate.toDateString()]
+      if (data && data.bloodSugar && diffDays <= 1) {
+        return bloodSugarLevels[data.bloodSugar]
+      }
+    }
+    return 50
+  }
+
+  // Pre-calculate segments
+  const allGridDays = []
+  
+  // Previous month padding
   const prevMonthLastDay = new Date(year, month, 0).getDate()
   for (let i = firstDayIndex - 1; i >= 0; i--) {
-    days.push({
-      date: new Date(year, month - 1, prevMonthLastDay - i),
-      isCurrentMonth: false,
-      number: prevMonthLastDay - i
-    })
+    allGridDays.push(new Date(year, month - 1, prevMonthLastDay - i))
   }
   
-  const today = new Date()
+  // Current month
   for (let i = 1; i <= lastDayOfMonth.getDate(); i++) {
-    const date = new Date(year, month, i)
+    allGridDays.push(new Date(year, month, i))
+  }
+  
+  // Next month padding
+  const totalSlots = allGridDays.length > 35 ? 42 : 35
+  const remainingSlots = totalSlots - allGridDays.length
+  for (let i = 1; i <= remainingSlots; i++) {
+    allGridDays.push(new Date(year, month + 1, i))
+  }
+
+  return allGridDays.map((date, index) => {
     const dateStr = date.toDateString()
     const entryData = monthlyEntries.value[dateStr]
+    const isCurrentMonth = date.getMonth() === month
     
-    days.push({
+    const startLevel = findLastKnownLevel(date)
+    if (entryData && entryData.bloodSugar) {
+      lastKnownLevel = bloodSugarLevels[entryData.bloodSugar]
+    }
+    const endLevel = lastKnownLevel
+    
+    console.log(entryData)
+    const color = bloodSugarOptions.find(option => option.value === entryData?.bloodSugar)?.color
+    console.log(color)
+    return {
       date,
-      isCurrentMonth: true,
+      isCurrentMonth,
       isToday: date.toDateString() === today.toDateString(),
       isSelected: props.selectedDate && date.toDateString() === props.selectedDate.toDateString(),
-      number: i,
-      data: entryData
-    })
-  }
-  
-  const totalSlots = days.length > 35 ? 42 : 35
-  const remainingSlots = totalSlots - days.length
-  for (let i = 1; i <= remainingSlots; i++) {
-    days.push({
-      date: new Date(year, month + 1, i),
-      isCurrentMonth: false,
-      number: i
-    })
-  }
-  
-  return days
+      number: date.getDate(),
+      data: entryData,
+      startLevel,
+      endLevel,
+      color
+    }
+  })
 })
 
 const nextMonth = () => {
@@ -167,15 +210,19 @@ const selectDay = (day) => {
       >
         <span class="day-number">{{ day.number }}</span>
         
+        <!-- Blood Sugar Line Chart Segment -->
+        <div class="bs-chart-container">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="bs-chart-svg">
+            <path 
+              :d="`M 0 ${day.startLevel} L 20 ${day.endLevel} L 100 ${day.endLevel}`" 
+              class="bs-line"
+              :class="{'continuous-line': !day.data || !day.data.bloodSugar}"
+              :stroke="`${day.color}`"
+            />
+          </svg>
+        </div>
+
         <div class="day-icons" v-if="day.data">
-          <!-- Blood Sugar Icon -->
-          <img 
-            v-if="day.data.bloodSugar && bloodSugarIconMap[day.data.bloodSugar]" 
-            :src="bloodSugarIconMap[day.data.bloodSugar]" 
-            class="calendar-icon bs-icon"
-            alt="Blood Sugar"
-          />
-          
           <!-- Ovulation Icon -->
           <img 
             v-if="day.data.ovulation && ovulationIconMap[day.data.ovulation]" 
@@ -275,5 +322,40 @@ const selectDay = (day) => {
     width: 16px;
     height: 16px;
   }
+}
+
+.bs-chart-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bs-chart-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.bs-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.6;
+}
+
+.bs-line.continuous-line {
+  stroke: var(--border);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  opacity: 0.3;
+}
+
+.day-number, .day-icons {
+  position: relative;
+  z-index: 1;
 }
 </style>

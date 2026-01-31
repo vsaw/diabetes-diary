@@ -8,24 +8,13 @@ const props = defineProps({
 
 const emit = defineEmits(['entry-saved'])
 
-import TooLowIcon from '../assets/icons/blood-sugar/too-low.svg'
-import LowIcon from '../assets/icons/blood-sugar/low.svg'
-import OnTargetIcon from '../assets/icons/blood-sugar/on-target.svg'
-import HighIcon from '../assets/icons/blood-sugar/high.svg'
-import TooHighIcon from '../assets/icons/blood-sugar/too-high.svg'
 
 import FollicularIcon from '../assets/icons/ovulation/follicular.svg'
 import OvulationIcon from '../assets/icons/ovulation/ovulation.svg'
 import LutealIcon from '../assets/icons/ovulation/luteal.svg'
 import MenstrualIcon from '../assets/icons/ovulation/menstrual.svg'
 
-const bloodSugarOptions = [
-  { label: 'Too low', value: 'too-low', color: '#ef4444', icon: TooLowIcon },
-  { label: 'Low', value: 'low', color: '#f97316', icon: LowIcon },
-  { label: 'On target', value: 'on-target', color: '#22c55e', icon: OnTargetIcon },
-  { label: 'High', value: 'high', color: '#f97316', icon: HighIcon },
-  { label: 'Too high', value: 'too-high', color: '#ef4444', icon: TooHighIcon }
-]
+import { bloodSugarOptions } from '../utils/consts'
 
 const ovulationPhases = [
   { label: 'Follicular', icon: FollicularIcon, color: '#9333ea' },
