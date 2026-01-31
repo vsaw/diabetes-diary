@@ -1,0 +1,279 @@
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue'
+import { getEntriesByMonth } from '../utils/db'
+
+// Blood Sugar Icons
+import TooLowIcon from '../assets/icons/blood-sugar/too-low.svg'
+import LowIcon from '../assets/icons/blood-sugar/low.svg'
+import OnTargetIcon from '../assets/icons/blood-sugar/on-target.svg'
+import HighIcon from '../assets/icons/blood-sugar/high.svg'
+import TooHighIcon from '../assets/icons/blood-sugar/too-high.svg'
+
+// Ovulation Icons
+import FollicularIcon from '../assets/icons/ovulation/follicular.svg'
+import OvulationIcon from '../assets/icons/ovulation/ovulation.svg'
+import LutealIcon from '../assets/icons/ovulation/luteal.svg'
+import MenstrualIcon from '../assets/icons/ovulation/menstrual.svg'
+
+const props = defineProps({
+  selectedDate: Date,
+  dataVersion: Number
+})
+
+const emit = defineEmits(['select-date'])
+
+const currentDate = ref(new Date())
+const monthlyEntries = ref({}) // Keyed by date string
+
+const daysOfWeek = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+
+const bloodSugarIconMap = {
+  'too-low': TooLowIcon,
+  'low': LowIcon,
+  'on-target': OnTargetIcon,
+  'high': HighIcon,
+  'too-high': TooHighIcon
+}
+
+const ovulationIconMap = {
+  'Follicular': FollicularIcon,
+  'Ovulation': OvulationIcon,
+  'Luteal': LutealIcon,
+  'Menstrual': MenstrualIcon
+}
+
+const currentMonthName = computed(() => {
+  return currentDate.value.toLocaleString('default', { month: 'long', year: 'numeric' })
+})
+
+const fetchMonthlyData = async () => {
+  const year = currentDate.value.getFullYear()
+  const month = currentDate.value.getMonth()
+  const entries = await getEntriesByMonth(year, month)
+  
+  // Create a map for quick lookup
+  const map = {}
+  entries.forEach(entry => {
+    map[entry.date] = entry.data
+  })
+  monthlyEntries.value = map
+}
+
+onMounted(fetchMonthlyData)
+watch(() => currentDate.value, fetchMonthlyData)
+watch(() => props.dataVersion, fetchMonthlyData)
+
+const calendarDays = computed(() => {
+  const year = currentDate.value.getFullYear()
+  const month = currentDate.value.getMonth()
+  
+  const firstDayOfMonth = new Date(year, month, 1)
+  const lastDayOfMonth = new Date(year, month + 1, 0)
+  
+  let startDay = firstDayOfMonth.getDay()
+  const firstDayIndex = (startDay === 0) ? 6 : startDay - 1
+  
+  const days = []
+  
+  const prevMonthLastDay = new Date(year, month, 0).getDate()
+  for (let i = firstDayIndex - 1; i >= 0; i--) {
+    days.push({
+      date: new Date(year, month - 1, prevMonthLastDay - i),
+      isCurrentMonth: false,
+      number: prevMonthLastDay - i
+    })
+  }
+  
+  const today = new Date()
+  for (let i = 1; i <= lastDayOfMonth.getDate(); i++) {
+    const date = new Date(year, month, i)
+    const dateStr = date.toDateString()
+    const entryData = monthlyEntries.value[dateStr]
+    
+    days.push({
+      date,
+      isCurrentMonth: true,
+      isToday: date.toDateString() === today.toDateString(),
+      isSelected: props.selectedDate && date.toDateString() === props.selectedDate.toDateString(),
+      number: i,
+      data: entryData
+    })
+  }
+  
+  const totalSlots = days.length > 35 ? 42 : 35
+  const remainingSlots = totalSlots - days.length
+  for (let i = 1; i <= remainingSlots; i++) {
+    days.push({
+      date: new Date(year, month + 1, i),
+      isCurrentMonth: false,
+      number: i
+    })
+  }
+  
+  return days
+})
+
+const nextMonth = () => {
+  currentDate.value = new Date(currentDate.value.getFullYear(), currentDate.value.getMonth() + 1, 1)
+}
+
+const prevMonth = () => {
+  currentDate.value = new Date(currentDate.value.getFullYear(), currentDate.value.getMonth() - 1, 1)
+}
+
+const selectDay = (day) => {
+  if (day.isCurrentMonth) {
+    emit('select-date', day.date)
+  }
+}
+</script>
+
+<template>
+  <div class="calendar-container glass">
+    <div class="calendar-header">
+      <h2 class="month-title">{{ currentMonthName }}</h2>
+      <div class="calendar-nav">
+        <button @click="prevMonth" class="btn-icon" aria-label="Previous Month">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <button @click="nextMonth" class="btn-icon" aria-label="Next Month">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="calendar-grid">
+      <div v-for="(day, idx) in daysOfWeek" :key="idx" class="weekday-header">
+        <span class="desktop-only" v-if="idx===0">Mon</span>
+        <span class="desktop-only" v-else-if="idx===1">Tue</span>
+        <span class="desktop-only" v-else-if="idx===2">Wed</span>
+        <span class="desktop-only" v-else-if="idx===3">Thu</span>
+        <span class="desktop-only" v-else-if="idx===4">Fri</span>
+        <span class="desktop-only" v-else-if="idx===5">Sat</span>
+        <span class="desktop-only" v-else-if="idx===6">Sun</span>
+        <span class="mobile-only">{{ day }}</span>
+      </div>
+      
+      <div 
+        v-for="(day, index) in calendarDays" 
+        :key="index" 
+        class="calendar-day"
+        :class="{ 
+          'other-month': !day.isCurrentMonth, 
+          'today': day.isToday,
+          'selected': day.isSelected 
+        }"
+        @click="selectDay(day)"
+      >
+        <span class="day-number">{{ day.number }}</span>
+        
+        <div class="day-icons" v-if="day.data">
+          <!-- Blood Sugar Icon -->
+          <img 
+            v-if="day.data.bloodSugar && bloodSugarIconMap[day.data.bloodSugar]" 
+            :src="bloodSugarIconMap[day.data.bloodSugar]" 
+            class="calendar-icon bs-icon"
+            alt="Blood Sugar"
+          />
+          
+          <!-- Ovulation Icon -->
+          <img 
+            v-if="day.data.ovulation && ovulationIconMap[day.data.ovulation]" 
+            :src="ovulationIconMap[day.data.ovulation]" 
+            class="calendar-icon ov-icon"
+            alt="Ovulation"
+          />
+          
+          <!-- Comment Icon -->
+          <svg 
+            v-if="day.data.comments" 
+            class="calendar-icon comment-icon" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            stroke-width="2" 
+            stroke-linecap="round" 
+            stroke-linejoin="round"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.calendar-day {
+  cursor: pointer;
+  position: relative;
+  min-height: 4.5rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.4rem;
+  overflow: hidden; /* Prevent content from stretching the cell */
+  min-width: 0; /* Allow grid to shrink cell */
+}
+
+@media (max-width: 640px) {
+  .calendar-day {
+    min-height: 3.5rem;
+    padding: 0.25rem;
+  }
+}
+
+.calendar-day.selected {
+  background-color: #eff6ff;
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.day-number {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.day-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: auto;
+  justify-content: flex-end;
+  max-width: 100%;
+}
+
+.calendar-icon {
+  width: 12px; /* Slightly smaller for better fit */
+  height: 12px;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.comment-icon {
+  color: var(--text-secondary);
+}
+
+.desktop-only {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .desktop-only {
+    display: inline;
+  }
+  .mobile-only {
+    display: none;
+  }
+  .calendar-icon {
+    width: 16px;
+    height: 16px;
+  }
+}
+</style>
