@@ -63,6 +63,8 @@ jobs:
           RSYNC_CONNECT_STRING: ${{ secrets.RSYNC_CONNECT_STRING }}
           RSYNC_PASSWORD: ${{ secrets.RSYNC_PASSWORD }}
         run: |
+          mkdir -p ~/.ssh
+          touch ~/.ssh/known_hosts
           ssh-keyscan -H $(echo "${{ secrets.RSYNC_CONNECT_STRING }}" | awk -F"@" '{print $2}') >> ~/.ssh/known_hosts
           rsync -avz --recursive --delete-after ./dist/ "${{ secrets.RSYNC_CONNECT_STRING }}:~/diabetes-diary/"
           echo "Deployment complete ✅"
