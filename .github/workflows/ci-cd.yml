@@ -53,18 +53,16 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Install lftp (SFTP client)
-        run: sudo apt-get update && sudo apt-get install -y lftp
-
       - name: Install & build
         run: |
           npm ci
           npm run build
 
-      - name: Deploy built files via SFTP
+      - name: Deploy built files via rsync
         env:
           RSYNC_CONNECT_STRING: ${{ secrets.RSYNC_CONNECT_STRING }}
           RSYNC_PASSWORD: ${{ secrets.RSYNC_PASSWORD }}
         run: |
+          ssh-keyscan -H $(echo "${{ secrets.RSYNC_CONNECT_STRING }}" | awk -F"@" '{print $2}') >> ~/.ssh/known_hosts
           rsync -avz --recursive --delete-after ./dist/ "${{ secrets.RSYNC_CONNECT_STRING }}:~/diabetes-diary/"
           echo "Deployment complete ✅"
