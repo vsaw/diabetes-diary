@@ -39,7 +39,7 @@ jobs:
         run: npm run build
 
   deploy:
-    name: Deploy to SFTP 🚀
+    name: Deploy to Production 🚀
     needs: build-and-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
@@ -66,5 +66,5 @@ jobs:
           mkdir -p ~/.ssh
           touch ~/.ssh/known_hosts
           ssh-keyscan -H $(echo "${{ secrets.RSYNC_CONNECT_STRING }}" | awk -F"@" '{print $2}') >> ~/.ssh/known_hosts
-          rsync -avz --recursive --delete-after ./dist/ "${{ secrets.RSYNC_CONNECT_STRING }}:~/diabetes-diary/"
+          RSYNC_PASSWORD="${{ secrets.RSYNC_PASSWORD }}" rsync --verbose -avz --recursive --delete-after ./dist/ "${{ secrets.RSYNC_CONNECT_STRING }}:~/diabetes-diary/"
           echo "Deployment complete ✅"
