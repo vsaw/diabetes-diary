@@ -1,70 +1,65 @@
-# CI/CD workflow: runs tests (if present), builds, and deploys build output to an SFTP server.
-# Required secrets for SFTP deploy (set these in repository Settings → Secrets):
-# - SFTP_HOST: host or IP of SFTP server
-# - SFTP_PORT: (optional) port; defaults to 22
-# - SFTP_USERNAME
-# - SFTP_PASSWORD (optional if using SFTP_PRIVATE_KEY)
-# - SFTP_PRIVATE_KEY (optional; raw private key contents, use instead of password)
-# - SFTP_REMOTE_PATH: remote directory to deploy into (e.g. /var/www/site)
-
 name: CI/CD
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
-  build-and-test:
-    name: Install, Test (if present) and Build ✅
+  build-test-deploy:
+    name: Install, Test and Build and Deploy 🚀
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
-
       - name: Install dependencies
         run: npm ci
-
       - name: Run tests (only if test script exists)
         run: npm test --if-present
-
       - name: Build
         run: npm run build
 
   deploy:
-    name: Deploy to Production 🚀
-    needs: build-and-test
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    environment: production
+    needs: build-test-deploy
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-
-      - name: Install & build
-        run: |
-          npm ci
-          npm run build
-
-      - name: Deploy built files via rsync
-        env:
-          RSYNC_CONNECT_STRING: ${{ secrets.RSYNC_CONNECT_STRING }}
-          RSYNC_PASSWORD: ${{ secrets.RSYNC_PASSWORD }}
-        run: |
-          mkdir -p ~/.ssh
-          touch ~/.ssh/known_hosts
-          ssh-keyscan -H $(echo "${{ secrets.RSYNC_CONNECT_STRING }}" | awk -F"@" '{print $2}') >> ~/.ssh/known_hosts
-          RSYNC_PASSWORD="${{ secrets.RSYNC_PASSWORD }}" rsync --verbose -avz --recursive --delete-after ./dist/ "${{ secrets.RSYNC_CONNECT_STRING }}:~/diabetes-diary/"
-          echo "Deployment complete ✅"
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Upload entire repository
+          path: './dist'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
